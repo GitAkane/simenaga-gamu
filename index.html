@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>伝説の羽を目指せ！シマエナガシューティング！</title>
+  <style>
+    body { 
+      text-align: center; 
+      background-color: #222; 
+      color: white; 
+      font-family: sans-serif; 
+      margin: 0;
+      padding: 10px 0;
+    }
+    
+    #gameWrapper {
+      position: relative;
+      display: inline-block;
+      width: 400px;
+      max-width: 100vw; 
+    }
+
+    canvas { 
+      background-color: #000; 
+      box-shadow: 0 0 15px rgba(255, 255, 255, 0.5); 
+      width: 100%;
+      height: auto;
+      cursor: pointer;
+      touch-action: none; 
+    }
+
+    .t-btn {
+      position: absolute;
+      background: rgba(255, 255, 255, 0.2);
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      border-radius: 50%;
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+      z-index: 10;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
+    .t-btn.active {
+      background: rgba(255, 255, 255, 0.6);
+      border-color: #FFD700;
+      transform: scale(0.95);
+    }
+  </style>
+</head>
+<body>
+  <!-- ★ タイトルとカッコいい説明文を復活！ ★ -->
+  <h1>伝説の羽を目指せ！シマエナガシューティング！</h1>
+  <p style="line-height: 1.5;">
+    コンボを繋いでシマエナガが覚醒！SSSランクの超連射で「伝説の羽」を目指せ！<br>
+    <span style="font-size: 14px; color: #feff9f;">【PC: キーボード操作 ｜ スマホ・タブレット: 画面のボタン操作】</span>
+  </p>
+  
+  <div id="gameWrapper">
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+    
+    <div id="touchUI" style="display: none;">
+      <div id="btnUp" class="t-btn" style="bottom: 20%; left: 17.5%; width: 15%; aspect-ratio: 1; font-size: 24px;">⬆️</div>
+      <div id="btnLeft" class="t-btn" style="bottom: 8%; left: 2.5%; width: 15%; aspect-ratio: 1; font-size: 24px;">⬅️</div>
+      <div id="btnRight" class="t-btn" style="bottom: 8%; left: 32.5%; width: 15%; aspect-ratio: 1; font-size: 24px;">➡️</div>
+      <div id="btnDown" class="t-btn" style="bottom: 2%; left: 17.5%; width: 15%; aspect-ratio: 1; font-size: 24px;">⬇️</div>
+
+      <div id="btnShoot" class="t-btn" style="bottom: 6%; right: 5%; width: 20%; aspect-ratio: 1; font-size: 28px;">🎯</div>
+      <div id="btnBomb" class="t-btn" style="bottom: 24%; right: 9%; width: 13%; aspect-ratio: 1; font-size: 20px;">💣</div>
+
+      <div id="btnReset" class="t-btn" style="top: 2%; left: 2%; width: 10%; aspect-ratio: 1; font-size: 16px;" title="セーブ消去">♻️</div>
+      <div id="btnPause" class="t-btn" style="top: 2%; right: 2%; width: 10%; aspect-ratio: 1; font-size: 16px;" title="一時停止">⏸</div>
+      <div id="btnSuicide" class="t-btn" style="top: 2%; right: 14%; width: 10%; aspect-ratio: 1; font-size: 16px;" title="自滅">💀</div>
+      <div id="btnTest" class="t-btn" style="top: 2%; right: 26%; width: 10%; aspect-ratio: 1; font-size: 16px;" title="テストモード">🛠️</div>
+    </div>
+  </div>
+  
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    let player = { x: 175, y: 500, width: 40, height: 40, speed: 3.2 };
+    
+    let playerMaxHp = 5;      
+    let playerHp = 5;         
+    let playerShotLevel = 1;  
+    let playerInvincible = 0; 
+    let isChoosingEvolution = false; 
+
+    let isDying = false; 
+    let deathTimer = 0;  
+
+    let hitStopTimer = 0; 
+
+    let combo = 0;
+    let comboTimer = 0;
+    let maxComboTimer = 180; 
+    let bombFlash = 0;
+    
+    let score = 0; 
+    let currentStage = 1;
+    let nextBossScore = 50; 
+
+    let isTestMode = false;
+    let isPaused = false;
+
+    let isGameOver = false; 
+    let isGameClear = false;
+    
+    let goalFeather = null;
+    let transitionTimer = 0; 
+    let transitionText = "";
+
+    let isBossBattle = false;
+    let boss = null;
+    let bossBullets = [];
+    let bossMoveDirection = 1; 
+    let bossHitFlash = 0; 
+
+    let rightPressed = false;
+    let leftPressed = false;
+    let upPressed = false;
+    let downPressed = false;
+    let spacePressed = false; 
+    let lastShotTime = 0;
+
+    let bullets = [];
+    let items = [];
+    let explosions = [];
+
+    function saveGame() {
+        const saveData = {
+            currentStage: currentStage, score: score, playerMaxHp: playerMaxHp,
+            playerShotLevel: playerShotLevel, maxComboTimer: maxComboTimer, nextBossScore: nextBossScore
+        };
+        localStorage.setItem("shimaenagaSave", JSON.stringify(saveData));
+    }
+
+    function loadGame() {
+        const saveDataStr = localStorage.getItem("shimaenagaSave");
+        if (saveDataStr) {
+            const saveData = JSON.parse(saveDataStr);
+            currentStage = saveData.currentStage; score = saveData.score;
+            playerMaxHp = saveData.playerMaxHp; playerHp = playerMaxHp; 
+            playerShotLevel = saveData.playerShotLevel;
+            maxComboTimer = saveData.maxComboTimer || 180; 
+            nextBossScore = saveData.nextBossScore || 50;
+        }
+    }
+    loadGame();
+
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    let audioCtx;
+    function initAudio() {
+        if (!audioCtx) audioCtx = new AudioContext();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+    function playSE(type) {
+        if (!audioCtx || audioCtx.state === 'suspended') return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        let now = audioCtx.currentTime;
+        
+        if (type === 'shoot') {
+            osc.type = 'square'; osc.frequency.setValueAtTime(880, now); osc.frequency.exponentialRampToValueAtTime(110, now + 0.1);
+            gain.gain.setValueAtTime(0.05, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+            osc.start(now); osc.stop(now + 0.1);
+        } else if (type === 'hit') {
+            osc.type = 'triangle'; osc.frequency.setValueAtTime(440, now); osc.frequency.exponentialRampToValueAtTime(110, now + 0.1);
+            gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+            osc.start(now); osc.stop(now + 0.1);
+        } else if (type === 'explosion') {
+            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(200, now); osc.frequency.exponentialRampToValueAtTime(10, now + 0.3);
+            gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            osc.start(now); osc.stop(now + 0.3);
+        } else if (type === 'damage') {
+            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, now); osc.frequency.linearRampToValueAtTime(50, now + 0.3);
+            gain.gain.setValueAtTime(0.2, now); gain.gain.linearRampToValueAtTime(0.001, now + 0.3);
+            osc.start(now); osc.stop(now + 0.3);
+        } else if (type === 'bomb') {
+            osc.type = 'sine'; osc.frequency.setValueAtTime(100, now); osc.frequency.exponentialRampToValueAtTime(10, now + 1.0);
+            gain.gain.setValueAtTime(0.5, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
+            osc.start(now); osc.stop(now + 1.0);
+        } else if (type === 'clear') {
+            osc.type = 'triangle'; osc.frequency.setValueAtTime(523.25, now); osc.frequency.setValueAtTime(659.25, now + 0.15); 
+            osc.frequency.setValueAtTime(783.99, now + 0.3); osc.frequency.setValueAtTime(1046.50, now + 0.45); 
+            gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 2.0);
+            osc.start(now); osc.stop(now + 2.0);
+        } else if (type === 'heal') {
+            osc.type = 'sine'; osc.frequency.setValueAtTime(440, now); osc.frequency.setValueAtTime(880, now + 0.1); 
+            gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            osc.start(now); osc.stop(now + 0.3);
+        }
+    }
+
+    function useBomb() {
+        if (!isPaused && !isDying && playerHp > 1 && bombFlash <= 0 && !isGameOver && !isGameClear && !isChoosingEvolution) {
+            if (!isTestMode) playerHp--; 
+            bombFlash = 30; 
+            playSE('bomb');
+            hitStopTimer = Math.max(hitStopTimer, 20);
+            
+            for(let i=0; i<bossBullets.length; i++) explosions.push({x: bossBullets[i].x, y: bossBullets[i].y, timer: 15});
+            bossBullets = [];
+            
+            for(let i=items.length-1; i>=0; i--){
+                let it = items[i];
+                explosions.push({x: it.x, y: it.y, timer: 15});
+                if(it.breakable || isTestMode) {
+                    if (!it.heal) { combo++; if (!isBossBattle) score += 5; }
+                }
+                items.splice(i, 1);
+            }
+            comboTimer = maxComboTimer; 
+            if (boss) { boss.hp -= 3; bossHitFlash = 10; boss.invincible = 40; }
+        }
+    }
+
+    function togglePause() {
+        if(!isGameClear && !isDying && !isGameOver && !isChoosingEvolution) isPaused = !isPaused; 
+    }
+
+    function selfDestruct() {
+        if (!isPaused && !isDying && !isGameOver && !isGameClear && !isChoosingEvolution) {
+            playerHp = 0; isDying = true; deathTimer = 90;
+            playSE('explosion'); hitStopTimer = Math.max(hitStopTimer, 20);
+        }
+    }
+
+    function toggleTestMode() {
+        isTestMode = !isTestMode;
+        if(isTestMode) playSE('heal'); 
+    }
+
+    function resetGame(fullReset = false) {
+        if(isGameOver || isGameClear) {
+            if (fullReset) localStorage.removeItem("shimaenagaSave");
+            location.reload();
+        }
+    }
+
+    document.addEventListener("keydown", (e) => {
+      initAudio(); 
+      if(isGameOver || isGameClear) {
+        if(e.key === "r" || e.key === "R") resetGame(false);
+        if(e.key === "t" || e.key === "T") resetGame(true);
+        return;
+      }
+      if (isChoosingEvolution) {
+        if (e.key === "1" || e.key === "１" || e.code === "Numpad1") { playerShotLevel++; applyEvolution("【ショット強化】を選んだ！"); } 
+        else if (e.key === "2" || e.key === "２" || e.code === "Numpad2") { maxComboTimer += 60; applyEvolution("【コンボ時間延長】を選んだ！"); } 
+        else if (e.key === "3" || e.key === "３" || e.code === "Numpad3") { playerMaxHp += 1; applyEvolution("【最大体力アップ】を選んだ！"); }
+        return; 
+      }
+
+      if(e.key === "q" || e.key === "Q") { togglePause(); return; }
+      if(e.key === "0" || e.key === "０") { toggleTestMode(); return; }
+      if(e.key === "b" || e.key === "B") { useBomb(); }
+      if(e.key === "f" || e.key === "F") { selfDestruct(); }
+
+      if(isPaused || isDying) return; 
+
+      if(e.key === "ArrowRight" || e.key === "d" || e.key === "D") rightPressed = true;
+      if(e.key === "ArrowLeft" || e.key === "a" || e.key === "A") leftPressed = true;
+      if(e.key === "ArrowUp" || e.key === "w" || e.key === "W") upPressed = true;
+      if(e.key === "ArrowDown" || e.key === "s" || e.key === "S") downPressed = true;
+      if(e.key === " " || e.key === "Spacebar") spacePressed = true; 
+    });
+    
+    document.addEventListener("keyup", (e) => {
+      if(e.key === "ArrowRight" || e.key === "d" || e.key === "D") rightPressed = false;
+      if(e.key === "ArrowLeft" || e.key === "a" || e.key === "A") leftPressed = false;
+      if(e.key === "ArrowUp" || e.key === "w" || e.key === "W") upPressed = false;
+      if(e.key === "ArrowDown" || e.key === "s" || e.key === "S") downPressed = false;
+      if(e.key === " " || e.key === "Spacebar") spacePressed = false; 
+    });
+
+    function bindTouch(id, onStart, onEnd) {
+        const btn = document.getElementById(id);
+        if(!btn) return;
+        btn.addEventListener('touchstart', (e) => {
+            e.preventDefault(); 
+            initAudio();
+            btn.classList.add('active');
+            if(onStart) onStart();
+        }, {passive: false});
+        
+        const endTouch = (e) => {
+            e.preventDefault();
+            btn.classList.remove('active');
+            if(onEnd) onEnd();
+        };
+        btn.addEventListener('touchend', endTouch, {passive: false});
+        btn.addEventListener('touchcancel', endTouch, {passive: false});
+    }
+
+    bindTouch('btnUp', () => upPressed = true, () => upPressed = false);
+    bindTouch('btnDown', () => downPressed = true, () => downPressed = false);
+    bindTouch('btnLeft', () => leftPressed = true, () => leftPressed = false);
+    bindTouch('btnRight', () => rightPressed = true, () => rightPressed = false);
+    bindTouch('btnShoot', () => spacePressed = true, () => spacePressed = false);
+    bindTouch('btnBomb', () => useBomb());
+    bindTouch('btnPause', () => togglePause());
+    bindTouch('btnSuicide', () => selfDestruct());
+    bindTouch('btnTest', () => toggleTestMode());
+    bindTouch('btnReset', () => resetGame(true)); 
+
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+        document.getElementById('touchUI').style.display = 'block';
+    }
+
+    canvas.addEventListener("click", (e) => {
+      initAudio(); 
+      if (isGameOver || isGameClear) {
+        resetGame(false); 
+        return;
+      }
+      if (isChoosingEvolution) {
+        let rect = canvas.getBoundingClientRect();
+        let clickX = e.clientX - rect.left;
+        let clickY = e.clientY - rect.top;
+
+        if (clickX >= 20 && clickX <= 300) {
+            if (clickY >= 300 && clickY <= 370) {
+                playerShotLevel++; applyEvolution("【ショット強化】を選んだ！");
+            } else if (clickY >= 380 && clickY <= 450) {
+                maxComboTimer += 60; applyEvolution("【コンボ時間延長】を選んだ！");
+            } else if (clickY >= 460 && clickY <= 530) {
+                playerMaxHp += 1; applyEvolution("【最大体力アップ】を選んだ！");
+            }
+        }
+      }
+    });
+
+    function applyEvolution(text) {
+        isChoosingEvolution = false;
+        playerHp = playerMaxHp; 
+        currentStage++;
+        transitionText = text;
+        transitionTimer = 180; 
+        saveGame();
+    }
+
+    function startBossBattle(stage) {
+      isBossBattle = true;
+      let hp = 15; let emoji = "🦇"; let speed = 2; let w = 80; let h = 80; let startY = 50; 
+      if(stage === 2) { hp = 25; emoji = "🐙"; speed = 3; }
+      if(stage === 3) { hp = 40; emoji = "giant_shimaenaga"; speed = 4; w = 120; h = 120; startY = 90; } 
+      boss = { x: canvas.width / 2 - w/2, y: startY, width: w, height: h, hp: hp, maxHp: hp, speed: speed, emoji: emoji, invincible: 0 };
+      items = []; 
+    }
+
+    function spawnItem() {
+      if(isGameOver || isGameClear || transitionTimer > 0 || isPaused || isChoosingEvolution || isDying || hitStopTimer > 0) return; 
+      if (goalFeather !== null) return; 
+
+      if (isBossBattle) {
+        if (Math.random() < 0.15) {
+          items.push({ x: Math.random() * (canvas.width - 40), y: -40, width: 40, height: 40, speed: 2.5, breakable: false, heal: true, color: "", emoji: "💖", moveType: 0, angle: 0 });
+        }
+      } else {
+        let isBreakable = Math.random() > 0.4;
+        let itemEmoji = ""; let itemSpeed = 2;
+        if (currentStage === 1) { itemEmoji = isBreakable ? "💣" : "🏹"; itemSpeed = 1.6; } 
+        else if (currentStage === 2) { itemEmoji = isBreakable ? "🪸" : "🐡"; itemSpeed = 2.4; } 
+        else if (currentStage === 3) { itemEmoji = isBreakable ? "🍬" : "🥦"; itemSpeed = 3.5; }
+        let moveType = Math.floor(Math.random() * 3);
+        items.push({ x: Math.random() * (canvas.width - 40), y: -40, width: 40, height: 40, speed: itemSpeed, breakable: isBreakable, heal: false, color: "", emoji: itemEmoji, moveType: moveType, angle: Math.random() * Math.PI * 2 });
+      }
+    }
+    setInterval(spawnItem, 800);
+
+    function draw() {
+      if (isDying) {
+          deathTimer--;
+          if (deathTimer <= 0) isGameOver = true; 
+      }
+
+      if(isGameClear) {
+        ctx.textAlign = "center"; 
+        ctx.shadowColor = "rgba(255, 215, 0, 0.8)"; ctx.shadowBlur = 25; ctx.font = "100px sans-serif"; ctx.fillStyle = "white"; 
+        ctx.fillText("🪶", canvas.width / 2, canvas.height / 2 - 60); ctx.shadowBlur = 0;
+        ctx.font = "bold 40px sans-serif"; ctx.lineWidth = 4; ctx.strokeStyle = "black";
+        ctx.strokeText("クリア！", canvas.width / 2, canvas.height / 2 + 50); ctx.fillStyle = "#FFD700"; ctx.fillText("クリア！", canvas.width / 2, canvas.height / 2 + 50);
+        ctx.fillStyle = "white"; ctx.font = "bold 18px sans-serif"; ctx.fillText("伝説の羽をゲット！おめでとう！", canvas.width / 2, canvas.height / 2 + 100);
+        ctx.fillStyle = "#FEFF9F"; ctx.font = "16px sans-serif"; ctx.fillText("画面タップ または Tキー で最初から！", canvas.width / 2, canvas.height / 2 + 140);
+        ctx.textAlign = "left"; requestAnimationFrame(draw); return; 
+      }
+
+      if(isGameOver) {
+        ctx.textAlign = "center"; ctx.fillStyle = "red"; ctx.font = "bold 50px sans-serif"; ctx.fillText("ゲームオーバー", canvas.width / 2, canvas.height / 2 - 20);
+        ctx.fillStyle = "white"; ctx.font = "bold 20px sans-serif"; ctx.fillText("画面タップで 今のステージからリトライ！", canvas.width / 2, canvas.height / 2 + 30);
+        ctx.fillStyle = "#CCC"; ctx.font = "16px sans-serif"; ctx.fillText("♻️ボタン または Tキー でステージ1から", canvas.width / 2, canvas.height / 2 + 70);
+        ctx.textAlign = "left"; return; 
+      }
+
+      let bgColor = "black"; let bgEmoji = "";
+      if (currentStage === 1) { bgColor = "#2c3e50"; bgEmoji = "🏰"; }
+      else if (currentStage === 2) { bgColor = "#0077be"; bgEmoji = "🌊"; }
+      else if (currentStage === 3) { bgColor = "#ffb6c1"; bgEmoji = "🏠🍭"; }
+
+      ctx.fillStyle = bgColor; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.globalAlpha = 0.3; ctx.fillStyle = "white"; ctx.font = "150px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText(bgEmoji, canvas.width / 2, canvas.height / 2 + 50); ctx.globalAlpha = 1.0; ctx.textAlign = "left";
+
+      let isUpdating = false;
+      if (!isPaused && !isChoosingEvolution && !isDying) {
+          if (hitStopTimer > 0) hitStopTimer--; else isUpdating = true; 
+      }
+
+      if (isUpdating) {
+        if (playerInvincible > 0) playerInvincible--;
+        if (isBossBattle && boss && boss.invincible > 0) boss.invincible--;
+        if (comboTimer > 0) { comboTimer--; if (comboTimer <= 0) combo = 0; }
+
+        if(rightPressed && player.x < canvas.width - player.width) player.x += player.speed;
+        if(leftPressed && player.x > 0) player.x -= player.speed;
+        if(upPressed && player.y > 200) player.y -= player.speed;
+        if(downPressed && player.y < canvas.height - player.height - 50) player.y += player.speed;
+
+        if (spacePressed) {
+          let now = Date.now();
+          let baseCooldown = 300; 
+          if (combo >= 4)  baseCooldown = 250; if (combo >= 6)  baseCooldown = 200; if (combo >= 8)  baseCooldown = 150; 
+          if (combo >= 10) baseCooldown = 120; if (combo >= 15) baseCooldown = 90;  if (combo >= 20) baseCooldown = 70;  
+          let cooldown = isTestMode ? 40 : baseCooldown; 
+          
+          if (now - lastShotTime > cooldown) {
+            lastShotTime = now; playSE('shoot'); 
+            let isGolden = combo >= 10; let bw = isGolden ? 24 : 14; let bh = isGolden ? 24 : 14;
+            let bCol = isGolden ? "#FFD700" : "#E0FFFF"; let cx = player.x + player.width / 2; 
+
+            if (playerShotLevel === 1) { bullets.push({ x: cx - bw/2, y: player.y, width: bw, height: bh, speed: 10, vx: 0, color: bCol }); } 
+            else if (playerShotLevel === 2) {
+              bullets.push({ x: cx - 10 - bw/2, y: player.y, width: bw, height: bh, speed: 10, vx: 0, color: bCol });
+              bullets.push({ x: cx + 10 - bw/2, y: player.y, width: bw, height: bh, speed: 10, vx: 0, color: bCol });
+            } else {
+              bullets.push({ x: cx - bw/2, y: player.y, width: bw, height: bh, speed: 10, vx: 0, color: bCol });
+              bullets.push({ x: cx - bw/2, y: player.y, width: bw, height: bh, speed: 10, vx: -3, color: bCol });
+              bullets.push({ x: cx - bw/2, y: player.y, width: bw, height: bh, speed: 10, vx: 3, color: bCol });
+            }
+          }
+        }
+      }
+
+      let drawPlayer = true;
+      if (playerInvincible > 0 && !isDying) { if (Math.floor(playerInvincible / 5) % 2 === 0) drawPlayer = false; }
+      if (drawPlayer) drawShimaenaga(ctx, player.x, player.y, isDying);
+
+      let isEnraged = false; let bossSpeedMult = 1.0; let bossRateMult = 1.0;
+      if (isBossBattle && boss) {
+        if (boss.hp <= boss.maxHp / 3) { isEnraged = true; bossSpeedMult = 1.8; bossRateMult = 2.0; }
+
+        if (isUpdating) {
+          boss.x += boss.speed * bossMoveDirection * bossSpeedMult;
+          if (boss.x <= 0) { boss.x = 0; bossMoveDirection = 1; }
+          if (boss.x + boss.width >= canvas.width) { boss.x = canvas.width - boss.width; bossMoveDirection = -1; }
+
+          if (currentStage === 1) { if (Math.random() < 0.008 * bossRateMult) bossBullets.push({ x: boss.x + boss.width / 2 - 30, y: boss.y + boss.height, width: 60, height: 60, speed: 1.5 * bossSpeedMult, emoji: "🔮", fontSize: "70px" }); } 
+          else if (currentStage === 2) { if (Math.random() < 0.05 * bossRateMult) bossBullets.push({ x: boss.x + boss.width / 2 - 15, y: boss.y + boss.height, width: 30, height: 30, speed: 0.8 * bossSpeedMult, emoji: "🫧", fontSize: "35px" }); } 
+          else { if (Math.random() < 0.04 * bossRateMult) bossBullets.push({ x: boss.x + boss.width / 2 - 15, y: boss.y + boss.height, width: 30, height: 30, speed: 2.5 * bossSpeedMult, emoji: "❄️", fontSize: "30px" }); }
+        }
+
+        if (isEnraged) { ctx.shadowColor = "red"; ctx.shadowBlur = 20; }
+        ctx.fillStyle = "red"; ctx.fillRect(boss.x, boss.y + boss.height + 5, boss.width, 8);
+        ctx.fillStyle = "#00FF00"; ctx.fillRect(boss.x, boss.y + boss.height + 5, (boss.hp / boss.maxHp) * boss.width, 8);
+        ctx.strokeStyle = "white"; ctx.strokeRect(boss.x, boss.y + boss.height + 5, boss.width, 8);
+
+        let alpha = 1.0;
+        if (boss.invincible > 0) alpha = (Math.floor(boss.invincible / 4) % 2 === 0) ? 0.3 : 1.0;
+        if (bossHitFlash > 0) alpha = 0.5; 
+        ctx.globalAlpha = alpha;
+        
+        let shakeX = isEnraged && isUpdating ? (Math.random() * 4 - 2) : 0; let shakeY = isEnraged && isUpdating ? (Math.random() * 4 - 2) : 0;
+        if (boss.emoji === "giant_shimaenaga") {
+            ctx.save(); ctx.translate(boss.x + shakeX, boss.y + shakeY); ctx.scale(boss.width / 40, boss.height / 40); 
+            drawShimaenaga(ctx, 0, 0, false); ctx.restore();
+        } else {
+            ctx.fillStyle = "white"; ctx.font = "80px sans-serif"; ctx.fillText(boss.emoji, boss.x + shakeX, boss.y + 70 + shakeY);
+        }
+        ctx.globalAlpha = 1.0; ctx.shadowBlur = 0; 
+
+        if (isUpdating && bossHitFlash > 0) bossHitFlash--;
+
+        let hm = 10;
+        if (isUpdating && player.x + hm < boss.x + boss.width && player.x + player.width - hm > boss.x && player.y + hm < boss.y + boss.height && player.y + player.height - hm > boss.y) {
+            if (playerInvincible <= 0 && !isTestMode) {
+                playerHp -= 2; playerInvincible = 50; combo = 0; comboTimer = 0; playSE('damage'); hitStopTimer = Math.max(hitStopTimer, 20); 
+                if (playerHp <= 0) { playerHp = 0; isDying = true; deathTimer = 90; }
+            }
+        }
+      }
+
+      for (let i = bossBullets.length - 1; i >= 0; i--) {
+        let bb = bossBullets[i];
+        if (isUpdating) bb.y += bb.speed;
+        ctx.fillStyle = "white"; ctx.font = bb.fontSize + " sans-serif"; ctx.fillText(bb.emoji, bb.x, bb.y + bb.height - 5);
+
+        let hm = bb.width / 4; 
+        if (isUpdating && player.x + hm < bb.x + bb.width && player.x + player.width - hm > bb.x && player.y + hm < bb.y + bb.height && player.y + player.height - hm > bb.y) {
+            if (playerInvincible <= 0 && !isTestMode) {
+                playerHp -= 2; playerInvincible = 40; combo = 0; comboTimer = 0; playSE('damage'); hitStopTimer = Math.max(hitStopTimer, 20); 
+                if (playerHp <= 0) { playerHp = 0; isDying = true; deathTimer = 90; }
+            }
+            bossBullets.splice(i, 1); continue;
+        }
+        if (bb.y > canvas.height) bossBullets.splice(i, 1);
+      }
+
+      if (goalFeather !== null) {
+        if (isUpdating) { if (goalFeather.y < 350) goalFeather.y += goalFeather.speed; }
+        ctx.shadowColor = "#FFD700"; ctx.shadowBlur = 30; ctx.fillStyle = "white"; ctx.font = "60px sans-serif"; ctx.fillText("🪶", goalFeather.x - 5, goalFeather.y + 45); ctx.shadowBlur = 0; 
+        if (isUpdating) {
+          if (player.x < goalFeather.x + goalFeather.width && player.x + player.width > goalFeather.x && player.y < goalFeather.y + goalFeather.height && player.y + player.height > goalFeather.y) {
+              if (!isGameClear) { playSE('clear'); localStorage.removeItem("shimaenagaSave"); }
+              isGameClear = true; 
+          }
+        }
+      }
+
+      if (isUpdating) {
+        for(let i = bullets.length - 1; i >= 0; i--) {
+          let b = bullets[i];
+          if (!b) continue;
+          if (b.y < 0) { bullets.splice(i, 1); continue; }
+          let hitSomething = false;
+          if (b.vx) b.x += b.vx;
+
+          for(let k = bossBullets.length - 1; k >= 0; k--) {
+              let bb = bossBullets[k];
+              if (b.x < bb.x + bb.width && b.x + b.width > bb.x && b.y < bb.y + bb.height && b.y + b.height > bb.y) {
+                  explosions.push({ x: bb.x, y: bb.y, timer: 15 }); bullets.splice(i, 1); bossBullets.splice(k, 1); hitSomething = true;
+                  hitStopTimer = Math.max(hitStopTimer, 12); playSE('explosion');
+                  combo++; if (!isBossBattle) score += 5; comboTimer = maxComboTimer; 
+                  if (combo % 4 === 0) { playerHp++; if (playerHp > playerMaxHp) playerHp = playerMaxHp; playSE('heal'); }
+                  break;
+              }
+          }
+          if (hitSomething) continue;
+
+          if (isBossBattle && boss) {
+            if (b.x < boss.x + boss.width && b.x + b.width > boss.x && b.y < boss.y + boss.height && b.y + b.height > boss.y) {
+                bullets.splice(i, 1); hitSomething = true;
+                if (boss.invincible <= 0) {
+                    boss.hp -= 1; bossHitFlash = 5; boss.invincible = 20; 
+                    hitStopTimer = Math.max(hitStopTimer, 12); playSE('hit');
+                    combo++; comboTimer = maxComboTimer; 
+                    if (combo % 4 === 0) { playerHp++; if (playerHp > playerMaxHp) playerHp = playerMaxHp; playSE('heal'); }
+                    if (boss.hp <= 0) {
+                        isBossBattle = false; bossBullets = []; boss = null; items = []; bullets = []; playSE('explosion'); nextBossScore = score + 50;
+                        if (currentStage === 3) { playerHp = playerMaxHp; transitionText = "ラスボス撃破！伝説の羽が出現！"; transitionTimer = 200; goalFeather = { x: 175, y: -60, width: 50, height: 50, speed: 2 }; } 
+                        else { isChoosingEvolution = true; } break;
+                    }
+                } else {
+                    comboTimer = maxComboTimer; 
+                }
+            }
+          }
+          if (hitSomething) continue;
+
+          for(let j = items.length - 1; j >= 0; j--) {
+            let item = items[j];
+            if (b.x < item.x + item.width && b.x + b.width > item.x && b.y < item.y + item.height && b.y + b.height > item.y) {
+                bullets.splice(i, 1); hitStopTimer = Math.max(hitStopTimer, 12); 
+                if (item.heal) {
+                    items.splice(j, 1); playerHp += 1; playSE('hit'); if (playerHp > playerMaxHp) playerHp = playerMaxHp;
+                } else if (item.breakable || isTestMode) {
+                    explosions.push({ x: item.x, y: item.y, timer: 15 }); items.splice(j, 1); playSE('explosion');
+                    combo++; if (!isBossBattle) score += 5; comboTimer = maxComboTimer; 
+                    if (combo % 4 === 0) { playerHp++; if (playerHp > playerMaxHp) playerHp = playerMaxHp; playSE('heal'); }
+                } else {
+                    combo = 0; comboTimer = 0; playSE('hit');
+                }
+                break; 
+            }
+          }
+        }
+        if (score >= currentStage * 50 && !isBossBattle && !isChoosingEvolution && goalFeather === null && currentStage <= 3) { startBossBattle(currentStage); }
+      }
+
+      ctx.shadowBlur = 6; ctx.shadowColor = "#FFF";
+      for(let i = 0; i < bullets.length; i++) {
+        if(bullets[i]) {
+          let b = bullets[i]; if (isUpdating) b.y -= b.speed;
+          ctx.beginPath(); ctx.arc(b.x + b.width/2, b.y + b.height/2, b.width/2, 0, Math.PI * 2);
+          ctx.fillStyle = b.color || "#E0FFFF"; ctx.fill(); ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = 2; ctx.stroke();
+        }
+      }
+      ctx.shadowBlur = 0; 
+
+      for(let i = items.length - 1; i >= 0; i--) {
+        let item = items[i];
+        if (isUpdating) {
+          if (item.moveType === 1) { item.angle += 0.1; item.x += Math.sin(item.angle) * 2; } 
+          else if (item.moveType === 2) { if (item.x < player.x) item.x += 0.8; if (item.x > player.x) item.x -= 0.8; }
+          item.y += item.speed;
+        }
+        
+        if (item.emoji !== "") { ctx.fillStyle = "white"; ctx.font = "35px sans-serif"; ctx.fillText(item.emoji, item.x, item.y + 35); } 
+        else { ctx.fillStyle = item.color; drawRoundedRect(ctx, item.x, item.y, item.width, item.height, 8); }
+
+        if (isUpdating) {
+          let hitMargin = 8; 
+          if (player.x + hitMargin < item.x + item.width - hitMargin && player.x + player.width - hitMargin > item.x + hitMargin && player.y + hitMargin < item.y + item.height - hitMargin && player.y + player.height - hitMargin > item.y + hitMargin) {
+              if (item.heal) { items.splice(i, 1); playerHp += 1; playSE('hit'); if (playerHp > playerMaxHp) playerHp = playerMaxHp; continue; } 
+              else {
+                  if (playerInvincible <= 0 && !isTestMode) {
+                      playerHp -= 1; playerInvincible = 40; combo = 0; comboTimer = 0; playSE('damage'); hitStopTimer = Math.max(hitStopTimer, 20); 
+                      if (playerHp <= 0) { playerHp = 0; isDying = true; deathTimer = 90; }
+                  }
+                  items.splice(i, 1); continue;
+              }
+          }
+        }
+        if (item.y > canvas.height) items.splice(i, 1);
+      }
+
+      if (bombFlash > 0) { ctx.fillStyle = "rgba(255, 255, 255, " + (bombFlash / 30) + ")"; ctx.fillRect(0, 0, canvas.width, canvas.height); if (isUpdating) bombFlash--; }
+
+      for (let i = explosions.length - 1; i >= 0; i--) {
+        let ex = explosions[i];
+        ctx.shadowColor = "#FFA500"; ctx.shadowBlur = 15; ctx.font = "55px sans-serif"; ctx.fillText("💥", ex.x - 10, ex.y + 45); ctx.shadowBlur = 0;
+        if (isUpdating) { ex.timer--; if (ex.timer <= 0) explosions.splice(i, 1); }
+      }
+
+      if (comboTimer > 0 && combo >= 1) {
+          let rank = "D"; let rankColor = "#AAAAAA"; let rankSize = 40;
+          if (combo >= 4) { rank = "C"; rankColor = "#32CD32"; rankSize = 45; } if (combo >= 6) { rank = "B"; rankColor = "#1E90FF"; rankSize = 50; } 
+          if (combo >= 8) { rank = "A"; rankColor = "#FF1493"; rankSize = 55; } if (combo >= 10){ rank = "S"; rankColor = "#FF4500"; rankSize = 65; } 
+          if (combo >= 15){ rank = "SS"; rankColor = "#FFD700"; rankSize = 75; } if (combo >= 20){ rank = "SSS"; rankColor = "#00FFFF"; rankSize = 85; } 
+
+          ctx.save(); let maxTimer = maxComboTimer; let alpha = Math.min(1.0, comboTimer / 20); let pop = 1.0;
+          if (comboTimer > maxTimer - 10) pop = 1.0 + (comboTimer - (maxTimer - 10)) * 0.05;
+          ctx.globalAlpha = alpha; ctx.translate(canvas.width - 80, 260); ctx.rotate(-0.15); ctx.scale(pop, pop); ctx.textAlign = "center";
+          ctx.fillStyle = "rgba(255, 255, 255, 0.3)"; ctx.fillRect(-80, -rankSize/2 + 5, 160, 4);
+          ctx.font = "italic bold " + rankSize + "px Impact, sans-serif"; ctx.fillStyle = rankColor; ctx.strokeStyle = "white"; ctx.lineWidth = 2;
+          ctx.shadowColor = rankColor; ctx.shadowBlur = 20; ctx.fillText(rank, 0, 0); ctx.strokeText(rank, 0, 0); ctx.shadowBlur = 0;
+          ctx.fillStyle = "white"; ctx.font = "italic bold 22px Impact, sans-serif"; ctx.fillText(combo + " Hits", 0, 30);
+          
+          let gaugeW = 120; let gaugeH = 6;
+          ctx.fillStyle = "rgba(0, 0, 0, 0.7)"; ctx.fillRect(-gaugeW/2, 40, gaugeW, gaugeH);
+          ctx.fillStyle = rankColor; ctx.shadowColor = rankColor; ctx.shadowBlur = 10;
+          ctx.fillRect(-gaugeW/2, 40, gaugeW * (comboTimer / maxTimer), gaugeH); ctx.shadowBlur = 0;
+
+          if (combo >= 4 && combo % 4 === 0 && comboTimer > maxTimer - 40) {
+              ctx.fillStyle = "#FFD700"; ctx.font = "bold 20px sans-serif"; ctx.shadowColor = "#FFD700"; ctx.shadowBlur = 15; ctx.fillText("✨ 1 UP! ✨", -10, -rankSize - 10);
+          }
+          ctx.restore();
+      }
+
+      if (isDying) { ctx.fillStyle = "rgba(255, 0, 0, 0.4)"; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+
+      if (isChoosingEvolution) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.85)"; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.textAlign = "left"; 
+        ctx.shadowColor = "#FFD700"; ctx.shadowBlur = 10; ctx.fillStyle = "#FFF"; ctx.font = "bold 24px sans-serif"; ctx.fillText("ボス撃破！進化を選べ！", 20, 250); ctx.shadowBlur = 0;
+        ctx.font = "14px sans-serif"; ctx.fillStyle = "#FEFF9F"; ctx.fillText("枠の中をタップして選択！", 20, 280);
+        ctx.fillStyle = "rgba(50, 50, 200, 0.85)"; drawRoundedRect(ctx, 20, 300, 280, 70, 10); ctx.fillStyle = "white"; ctx.font = "bold 18px sans-serif"; ctx.fillText("[1] ⚔️ ショット強化", 35, 330); ctx.font = "13px sans-serif"; ctx.fillText("撃てる弾の数が増えるぞ！", 35, 355);
+        ctx.fillStyle = "rgba(50, 180, 50, 0.85)"; drawRoundedRect(ctx, 20, 380, 280, 70, 10); ctx.fillStyle = "white"; ctx.font = "bold 18px sans-serif"; ctx.fillText("[2] ⏳ コンボ時間延長", 35, 410); ctx.font = "13px sans-serif"; ctx.fillText("コンボゲージが減りにくくなるぞ！", 35, 435);
+        ctx.fillStyle = "rgba(200, 50, 50, 0.85)"; drawRoundedRect(ctx, 20, 460, 280, 70, 10); ctx.fillStyle = "white"; ctx.font = "bold 18px sans-serif"; ctx.fillText("[3] 💖 体力最大値アップ", 35, 490); ctx.font = "13px sans-serif"; ctx.fillText("ハートの数が増えて全回復するぞ！", 35, 515);
+      }
+
+      if (transitionTimer > 0 && !isChoosingEvolution && !isDying) {
+        if (isUpdating) transitionTimer--; ctx.textAlign = "center"; ctx.shadowColor = "rgba(255, 215, 0, 0.8)"; ctx.shadowBlur = 15;
+        ctx.fillStyle = "#FFD700"; ctx.font = "bold 30px sans-serif"; ctx.fillText(transitionText, canvas.width / 2, canvas.height / 2 - 10); ctx.shadowBlur = 0;
+        ctx.fillStyle = "white"; ctx.font = "20px sans-serif"; if (goalFeather === null) ctx.fillText("次は ステージ" + currentStage + " がはじまるよ！", canvas.width / 2, canvas.height / 2 + 40); ctx.textAlign = "left"; 
+      }
+
+      ctx.fillStyle = "white"; ctx.font = "bold 20px sans-serif"; ctx.fillText("スコア: " + score + " / " + (currentStage * 50) + "   (ステージ " + currentStage + ")", 10, 30);
+      let stageStartScore = (currentStage - 1) * 50; let currentStageProgress = score - stageStartScore; if (currentStageProgress < 0) currentStageProgress = 0;
+      let meterWidth = (currentStageProgress / 50) * (canvas.width - 20); if (meterWidth > canvas.width - 20) meterWidth = canvas.width - 20;
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.3)"; ctx.fillRect(10, 45, canvas.width - 20, 15);
+      if(currentStage === 1) ctx.fillStyle = "#00FF7F"; else if(currentStage === 2) ctx.fillStyle = "#FFA500"; else ctx.fillStyle = "#FF4500"; 
+      ctx.fillRect(10, 45, meterWidth, 15); ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.strokeRect(10, 45, canvas.width - 20, 15);
+      
+      let nextGoalText = "";
+      if (isBossBattle) { nextGoalText = currentStage === 3 ? "⚠️ 超巨大シマエナガがあらわれた！たおせ！！" : "⚠️ あやしいヤツがあらわれた！たおせ！！"; ctx.fillStyle = "#FF5555"; ctx.fillText(nextGoalText, 10, 80); } 
+      else if (currentStage === 3 && score >= 150) { nextGoalText = "✨ 伝説の羽を取ってクリアしよう！"; ctx.fillText(nextGoalText, 10, 80); }
+
+      if (isTestMode) { ctx.fillStyle = "lime"; ctx.font = "bold 16px sans-serif"; ctx.fillText("🛠️ TEST MODE ON", 10, 100); }
+
+      let breakTarget = ""; let avoidTarget = "";
+      if (currentStage === 1) { breakTarget = "💣"; avoidTarget = "🏹"; } else if (currentStage === 2) { breakTarget = "🪸"; avoidTarget = "🐡"; } else if (currentStage === 3) { breakTarget = "🍬"; avoidTarget = "🥦"; }
+
+      ctx.fillStyle = "rgba(0, 0, 0, 0.5)"; ctx.fillRect(canvas.width - 150, 55, 140, 70); ctx.fillStyle = "white"; ctx.font = "14px sans-serif";
+      ctx.fillText("⭕ こわせる: " + breakTarget, canvas.width - 140, 75); ctx.fillText("❌ こわせない: " + avoidTarget, canvas.width - 140, 95);
+      if (isBossBattle) { ctx.fillStyle = "#FFB6C1"; ctx.fillText("💖 回復する: 💖", canvas.width - 140, 115); } 
+      else { ctx.fillStyle = "#888"; ctx.fillText("(ボス戦で💖が出るよ)", canvas.width - 140, 115); }
+
+      // ★ パソコン向け：キーボード操作のヒントを復活！ ★
+      ctx.fillStyle = "white";
+      ctx.font = "14px sans-serif";
+      ctx.fillText("Bキー: ボム(体力1消費)  Fキー: 自滅", canvas.width - 250, canvas.height - 50);
+
+      let heartBoxWidth = 30 + (playerMaxHp * 20); ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; ctx.fillRect(canvas.width - heartBoxWidth - 10, canvas.height - 40, heartBoxWidth, 30);
+      let heartsText = ""; for (let i = 0; i < playerMaxHp; i++) { if (i < playerHp) heartsText += "❤️"; else heartsText += "🖤"; }
+      ctx.fillStyle = "white"; ctx.font = "16px sans-serif"; ctx.fillText(heartsText, canvas.width - heartBoxWidth + 5, canvas.height - 18);
+
+      if (isPaused) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.5)"; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.textAlign = "center"; 
+        ctx.fillStyle = "white"; ctx.font = "bold 40px sans-serif"; ctx.fillText("一時停止中", canvas.width / 2, canvas.height / 2);
+        ctx.font = "20px sans-serif"; ctx.fillText("画面上部の ⏸ または Qキー で再開", canvas.width / 2, canvas.height / 2 + 40); ctx.textAlign = "left"; 
+      }
+      requestAnimationFrame(draw);
+    }
+
+    function drawRoundedRect(ctx, x, y, width, height, radius) {
+      ctx.beginPath(); ctx.moveTo(x + radius, y); ctx.lineTo(x + width - radius, y); ctx.quadraticCurveTo(x + width, y, x + width, y + radius); ctx.lineTo(x + width, y + height - radius); ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height); ctx.lineTo(x + radius, y + height); ctx.quadraticCurveTo(x, y + height, x, y + height - radius); ctx.lineTo(x, y + radius); ctx.quadraticCurveTo(x, y, x + radius, y); ctx.closePath(); ctx.fill();
+    }
+
+    function drawShimaenaga(ctx, x, y, isDying) {
+      ctx.fillStyle = "#333"; ctx.beginPath(); ctx.moveTo(x + 20, y + 30); ctx.lineTo(x + 10, y + 42); ctx.lineTo(x + 30, y + 42); ctx.fill();
+      ctx.fillStyle = "#FFFFFF"; ctx.beginPath(); ctx.arc(x + 20, y + 20, 18, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#E0E0E0"; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = "#333"; ctx.beginPath(); ctx.ellipse(x + 6, y + 22, 3, 8, -Math.PI / 6, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.ellipse(x + 34, y + 22, 3, 8, Math.PI / 6, 0, Math.PI * 2); ctx.fill();
+      if (isDying) {
+          ctx.strokeStyle = "#000"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + 10, y + 14); ctx.lineTo(x + 16, y + 20); ctx.moveTo(x + 16, y + 14); ctx.lineTo(x + 10, y + 20); ctx.moveTo(x + 24, y + 14); ctx.lineTo(x + 30, y + 20); ctx.moveTo(x + 30, y + 14); ctx.lineTo(x + 24, y + 20); ctx.stroke();
+      } else {
+          ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(x + 13, y + 16, 2, 0, Math.PI * 2); ctx.arc(x + 27, y + 16, 2, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = "#FFA500"; ctx.beginPath(); ctx.moveTo(x + 17, y + 19); ctx.lineTo(x + 23, y + 19); ctx.lineTo(x + 20, y + 22); ctx.fill();
+      ctx.fillStyle = "rgba(255, 105, 180, 0.6)"; ctx.beginPath(); ctx.arc(x + 9, y + 20, 2.5, 0, Math.PI * 2); ctx.arc(x + 31, y + 20, 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    draw();
+  </script>
+</body>
+</html>
