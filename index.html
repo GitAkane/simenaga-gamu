@@ -19,7 +19,6 @@
       flex-direction: column;
     }
     
-    /* ★タイトルを元の大きさに戻しました */
     #headerArea {
       flex: 0 0 auto;
       padding: 15px 0 5px 0;
@@ -27,7 +26,6 @@
     h1 { font-size: 26px; margin: 0 0 5px 0; }
     p { font-size: 15px; line-height: 1.5; margin: 0; }
 
-    /* スマホ画面の時だけタイトルを少し小さくして収める */
     @media (max-width: 600px) {
       h1 { font-size: 18px; }
       p { font-size: 12px; }
@@ -165,8 +163,9 @@
     let items = [];
     let explosions = [];
 
-    // ★スマホかどうかの判定（スマホの場合は重いエフェクトをオフにしてサクサク動かす）
+    // ★スマホ用判定と、スマホ専用の速度倍率（PCは1.0、スマホは1.8倍速に）
     let isMobile = false;
+    let speedMult = 1.0; 
 
     function saveGame() {
         const saveData = {
@@ -347,9 +346,16 @@
     bindTouch('btnTest', () => toggleTestMode());
     bindTouch('btnReset', () => resetGame(true)); 
 
+    let spawnTimerId = setInterval(spawnItem, 800);
+
+    // ★スマホ判定と専用倍率の適用
     if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
         document.getElementById('touchUI').style.display = 'block';
-        isMobile = true; // スマホフラグをONにして重いエフェクトをカットする
+        isMobile = true; 
+        speedMult = 1.8; // スマホの時はすべての速度を1.8倍にする
+        // アイテムの落下間隔も速度に合わせて短くする
+        clearInterval(spawnTimerId);
+        spawnTimerId = setInterval(spawnItem, Math.floor(800 / speedMult));
     }
 
     canvas.addEventListener("click", (e) => {
@@ -359,7 +365,6 @@
         return;
       }
       if (isChoosingEvolution) {
-        // スケール対応のクリック判定
         let rect = canvas.getBoundingClientRect();
         let scaleX = canvas.width / rect.width;
         let scaleY = canvas.height / rect.height;
@@ -414,12 +419,10 @@
         items.push({ x: Math.random() * (canvas.width - 40), y: -40, width: 40, height: 40, speed: itemSpeed, breakable: isBreakable, heal: false, color: "", emoji: itemEmoji, moveType: moveType, angle: Math.random() * Math.PI * 2 });
       }
     }
-    setInterval(spawnItem, 800);
 
-    // ★PCで本来のサクサクな動きを取り戻すため、時間補正(timeScale)を削除しました！
     function draw() {
       if (isDying) {
-          deathTimer--;
+          deathTimer -= speedMult;
           if (deathTimer <= 0) isGameOver = true; 
       }
 
@@ -454,25 +457,26 @@
 
       let isUpdating = false;
       if (!isPaused && !isChoosingEvolution && !isDying) {
-          if (hitStopTimer > 0) hitStopTimer--; else isUpdating = true; 
+          if (hitStopTimer > 0) hitStopTimer -= speedMult; else isUpdating = true; 
       }
 
       if (isUpdating) {
-        if (playerInvincible > 0) playerInvincible--;
-        if (isBossBattle && boss && boss.invincible > 0) boss.invincible--;
-        if (comboTimer > 0) { comboTimer--; if (comboTimer <= 0) combo = 0; }
+        if (playerInvincible > 0) playerInvincible -= speedMult;
+        if (isBossBattle && boss && boss.invincible > 0) boss.invincible -= speedMult;
+        if (comboTimer > 0) { comboTimer -= speedMult; if (comboTimer <= 0) combo = 0; }
 
-        if(rightPressed && player.x < canvas.width - player.width) player.x += player.speed;
-        if(leftPressed && player.x > 0) player.x -= player.speed;
-        if(upPressed && player.y > 200) player.y -= player.speed;
-        if(downPressed && player.y < canvas.height - player.height - 50) player.y += player.speed;
+        if(rightPressed && player.x < canvas.width - player.width) player.x += player.speed * speedMult;
+        if(leftPressed && player.x > 0) player.x -= player.speed * speedMult;
+        if(upPressed && player.y > 200) player.y -= player.speed * speedMult;
+        if(downPressed && player.y < canvas.height - player.height - 50) player.y += player.speed * speedMult;
 
         if (spacePressed) {
           let now = Date.now();
           let baseCooldown = 300; 
           if (combo >= 4)  baseCooldown = 250; if (combo >= 6)  baseCooldown = 200; if (combo >= 8)  baseCooldown = 150; 
           if (combo >= 10) baseCooldown = 120; if (combo >= 15) baseCooldown = 90;  if (combo >= 20) baseCooldown = 70;  
-          let cooldown = isTestMode ? 40 : baseCooldown; 
+          // ★発射間隔も速度倍率に合わせて短縮
+          let cooldown = (isTestMode ? 40 : baseCooldown) / speedMult; 
           
           if (now - lastShotTime > cooldown) {
             lastShotTime = now; playSE('shoot'); 
@@ -501,13 +505,13 @@
         if (boss.hp <= boss.maxHp / 3) { isEnraged = true; bossSpeedMult = 1.8; bossRateMult = 2.0; }
 
         if (isUpdating) {
-          boss.x += boss.speed * bossMoveDirection * bossSpeedMult;
+          boss.x += boss.speed * bossMoveDirection * bossSpeedMult * speedMult;
           if (boss.x <= 0) { boss.x = 0; bossMoveDirection = 1; }
           if (boss.x + boss.width >= canvas.width) { boss.x = canvas.width - boss.width; bossMoveDirection = -1; }
 
-          if (currentStage === 1) { if (Math.random() < 0.008 * bossRateMult) bossBullets.push({ x: boss.x + boss.width / 2 - 30, y: boss.y + boss.height, width: 60, height: 60, speed: 1.5 * bossSpeedMult, emoji: "🔮", fontSize: "70px" }); } 
-          else if (currentStage === 2) { if (Math.random() < 0.05 * bossRateMult) bossBullets.push({ x: boss.x + boss.width / 2 - 15, y: boss.y + boss.height, width: 30, height: 30, speed: 0.8 * bossSpeedMult, emoji: "🫧", fontSize: "35px" }); } 
-          else { if (Math.random() < 0.04 * bossRateMult) bossBullets.push({ x: boss.x + boss.width / 2 - 15, y: boss.y + boss.height, width: 30, height: 30, speed: 2.5 * bossSpeedMult, emoji: "❄️", fontSize: "30px" }); }
+          if (currentStage === 1) { if (Math.random() < 0.008 * bossRateMult * speedMult) bossBullets.push({ x: boss.x + boss.width / 2 - 30, y: boss.y + boss.height, width: 60, height: 60, speed: 1.5 * bossSpeedMult, emoji: "🔮", fontSize: "70px" }); } 
+          else if (currentStage === 2) { if (Math.random() < 0.05 * bossRateMult * speedMult) bossBullets.push({ x: boss.x + boss.width / 2 - 15, y: boss.y + boss.height, width: 30, height: 30, speed: 0.8 * bossSpeedMult, emoji: "🫧", fontSize: "35px" }); } 
+          else { if (Math.random() < 0.04 * bossRateMult * speedMult) bossBullets.push({ x: boss.x + boss.width / 2 - 15, y: boss.y + boss.height, width: 30, height: 30, speed: 2.5 * bossSpeedMult, emoji: "❄️", fontSize: "30px" }); }
         }
 
         if (isEnraged && !isMobile) { ctx.shadowColor = "red"; ctx.shadowBlur = 20; }
@@ -530,7 +534,7 @@
         ctx.globalAlpha = 1.0; 
         if(!isMobile) ctx.shadowBlur = 0; 
 
-        if (isUpdating && bossHitFlash > 0) bossHitFlash--;
+        if (isUpdating && bossHitFlash > 0) bossHitFlash -= speedMult;
 
         let hm = 10;
         if (isUpdating && player.x + hm < boss.x + boss.width && player.x + player.width - hm > boss.x && player.y + hm < boss.y + boss.height && player.y + player.height - hm > boss.y) {
@@ -543,7 +547,7 @@
 
       for (let i = bossBullets.length - 1; i >= 0; i--) {
         let bb = bossBullets[i];
-        if (isUpdating) bb.y += bb.speed;
+        if (isUpdating) bb.y += bb.speed * speedMult;
         ctx.fillStyle = "white"; ctx.font = bb.fontSize + " sans-serif"; ctx.fillText(bb.emoji, bb.x, bb.y + bb.height - 5);
 
         let hm = bb.width / 4; 
@@ -558,7 +562,7 @@
       }
 
       if (goalFeather !== null) {
-        if (isUpdating) { if (goalFeather.y < 350) goalFeather.y += goalFeather.speed; }
+        if (isUpdating) { if (goalFeather.y < 350) goalFeather.y += goalFeather.speed * speedMult; }
         if(!isMobile) { ctx.shadowColor = "#FFD700"; ctx.shadowBlur = 30; }
         ctx.fillStyle = "white"; ctx.font = "60px sans-serif"; ctx.fillText("🪶", goalFeather.x - 5, goalFeather.y + 45); 
         if(!isMobile) ctx.shadowBlur = 0; 
@@ -576,7 +580,7 @@
           if (!b) continue;
           if (b.y < 0) { bullets.splice(i, 1); continue; }
           let hitSomething = false;
-          if (b.vx) b.x += b.vx;
+          if (b.vx) b.x += b.vx * speedMult;
 
           for(let k = bossBullets.length - 1; k >= 0; k--) {
               let bb = bossBullets[k];
@@ -633,7 +637,7 @@
       if(!isMobile) { ctx.shadowBlur = 6; ctx.shadowColor = "#FFF"; }
       for(let i = 0; i < bullets.length; i++) {
         if(bullets[i]) {
-          let b = bullets[i]; if (isUpdating) b.y -= b.speed;
+          let b = bullets[i]; if (isUpdating) b.y -= b.speed * speedMult;
           ctx.beginPath(); ctx.arc(b.x + b.width/2, b.y + b.height/2, b.width/2, 0, Math.PI * 2);
           ctx.fillStyle = b.color || "#E0FFFF"; ctx.fill(); ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = 2; ctx.stroke();
         }
@@ -643,9 +647,9 @@
       for(let i = items.length - 1; i >= 0; i--) {
         let item = items[i];
         if (isUpdating) {
-          if (item.moveType === 1) { item.angle += 0.1; item.x += Math.sin(item.angle) * 2; } 
-          else if (item.moveType === 2) { if (item.x < player.x) item.x += 0.8; if (item.x > player.x) item.x -= 0.8; }
-          item.y += item.speed;
+          if (item.moveType === 1) { item.angle += 0.1 * speedMult; item.x += Math.sin(item.angle) * 2 * speedMult; } 
+          else if (item.moveType === 2) { if (item.x < player.x) item.x += 0.8 * speedMult; if (item.x > player.x) item.x -= 0.8 * speedMult; }
+          item.y += item.speed * speedMult;
         }
         
         if (item.emoji !== "") { ctx.fillStyle = "white"; ctx.font = "35px sans-serif"; ctx.fillText(item.emoji, item.x, item.y + 35); } 
@@ -667,14 +671,14 @@
         if (item.y > canvas.height) items.splice(i, 1);
       }
 
-      if (bombFlash > 0) { ctx.fillStyle = "rgba(255, 255, 255, " + (bombFlash / 30) + ")"; ctx.fillRect(0, 0, canvas.width, canvas.height); if (isUpdating) bombFlash--; }
+      if (bombFlash > 0) { ctx.fillStyle = "rgba(255, 255, 255, " + (bombFlash / 30) + ")"; ctx.fillRect(0, 0, canvas.width, canvas.height); if (isUpdating) bombFlash -= speedMult; }
 
       for (let i = explosions.length - 1; i >= 0; i--) {
         let ex = explosions[i];
         if(!isMobile) { ctx.shadowColor = "#FFA500"; ctx.shadowBlur = 15; }
         ctx.font = "55px sans-serif"; ctx.fillText("💥", ex.x - 10, ex.y + 45); 
         if(!isMobile) ctx.shadowBlur = 0;
-        if (isUpdating) { ex.timer--; if (ex.timer <= 0) explosions.splice(i, 1); }
+        if (isUpdating) { ex.timer -= speedMult; if (ex.timer <= 0) explosions.splice(i, 1); }
       }
 
       if (comboTimer > 0 && combo >= 1) {
@@ -722,7 +726,7 @@
       }
 
       if (transitionTimer > 0 && !isChoosingEvolution && !isDying) {
-        if (isUpdating) transitionTimer--; ctx.textAlign = "center"; 
+        if (isUpdating) transitionTimer -= speedMult; ctx.textAlign = "center"; 
         if(!isMobile) { ctx.shadowColor = "rgba(255, 215, 0, 0.8)"; ctx.shadowBlur = 15; }
         ctx.fillStyle = "#FFD700"; ctx.font = "bold 30px sans-serif"; ctx.fillText(transitionText, canvas.width / 2, canvas.height / 2 - 10); 
         if(!isMobile) ctx.shadowBlur = 0;
