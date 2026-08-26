@@ -58,8 +58,20 @@
       touch-action: none; 
     }
 
+    /* ★ 修正ポイント：操作ボタンをゲーム画面から独立させ、画面全体の最前面に配置 */
+    #touchUI {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none; /* ゲーム画面へのタッチをすり抜けさせる */
+      z-index: 100;
+    }
+
     .t-btn {
       position: absolute;
+      pointer-events: auto; /* ボタン部分はタッチを受け付ける */
       background: rgba(255, 255, 255, 0.2);
       border: 2px solid rgba(255, 255, 255, 0.4);
       border-radius: 50%;
@@ -70,7 +82,6 @@
       user-select: none;
       -webkit-user-select: none;
       touch-action: none;
-      z-index: 10;
       box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
     .t-btn.active {
@@ -92,22 +103,26 @@
   <div id="gameContainer">
     <div id="gameWrapper">
       <canvas id="gameCanvas" width="400" height="600"></canvas>
-      
-      <div id="touchUI" style="display: none;">
-        <div id="btnUp" class="t-btn" style="bottom: 20%; left: 17.5%; width: 15%; height: 10%; font-size: 24px;">⬆️</div>
-        <div id="btnLeft" class="t-btn" style="bottom: 8%; left: 2.5%; width: 15%; height: 10%; font-size: 24px;">⬅️</div>
-        <div id="btnRight" class="t-btn" style="bottom: 8%; left: 32.5%; width: 15%; height: 10%; font-size: 24px;">➡️</div>
-        <div id="btnDown" class="t-btn" style="bottom: 2%; left: 17.5%; width: 15%; height: 10%; font-size: 24px;">⬇️</div>
-
-        <div id="btnShoot" class="t-btn" style="bottom: 6%; right: 5%; width: 20%; height: 13.3%; font-size: 28px;">🎯</div>
-        <div id="btnBomb" class="t-btn" style="bottom: 24%; right: 9%; width: 13%; height: 8.6%; font-size: 20px;">💣</div>
-
-        <div id="btnReset" class="t-btn" style="top: 2%; left: 2%; width: 10%; height: 6.6%; font-size: 16px;" title="セーブ消去">♻️</div>
-        <div id="btnPause" class="t-btn" style="top: 2%; right: 2%; width: 10%; height: 6.6%; font-size: 16px;" title="一時停止">⏸</div>
-        <div id="btnSuicide" class="t-btn" style="top: 2%; right: 14%; width: 10%; height: 6.6%; font-size: 16px;" title="自滅">💀</div>
-        <div id="btnTest" class="t-btn" style="top: 2%; right: 26%; width: 10%; height: 6.6%; font-size: 16px;" title="テストモード">🛠️</div>
-      </div>
     </div>
+  </div>
+  
+  <!-- ★ 修正ポイント：左右の空きスペース（余白）にボタンが配置されるように絶対座標で指定 -->
+  <div id="touchUI" style="display: none;">
+    <!-- 左側の空きスペース（十字キー） -->
+    <div id="btnUp" class="t-btn" style="bottom: 120px; left: 80px; width: 60px; height: 60px; font-size: 24px;">⬆️</div>
+    <div id="btnLeft" class="t-btn" style="bottom: 50px; left: 10px; width: 60px; height: 60px; font-size: 24px;">⬅️</div>
+    <div id="btnRight" class="t-btn" style="bottom: 50px; left: 150px; width: 60px; height: 60px; font-size: 24px;">➡️</div>
+    <div id="btnDown" class="t-btn" style="bottom: 50px; left: 80px; width: 60px; height: 60px; font-size: 24px;">⬇️</div>
+
+    <!-- 右側の空きスペース（アクションキー） -->
+    <div id="btnShoot" class="t-btn" style="bottom: 50px; right: 20px; width: 80px; height: 80px; font-size: 32px;">🎯</div>
+    <div id="btnBomb" class="t-btn" style="bottom: 150px; right: 30px; width: 60px; height: 60px; font-size: 24px;">💣</div>
+
+    <!-- 上部の空きスペース（システムキー） -->
+    <div id="btnReset" class="t-btn" style="top: 15px; left: 15px; width: 45px; height: 45px; font-size: 18px;" title="セーブ消去">♻️</div>
+    <div id="btnPause" class="t-btn" style="top: 15px; right: 15px; width: 45px; height: 45px; font-size: 18px;" title="一時停止">⏸</div>
+    <div id="btnSuicide" class="t-btn" style="top: 15px; right: 75px; width: 45px; height: 45px; font-size: 18px;" title="自滅">💀</div>
+    <div id="btnTest" class="t-btn" style="top: 15px; right: 135px; width: 45px; height: 45px; font-size: 18px;" title="テストモード">🛠️</div>
   </div>
   
   <script>
@@ -163,7 +178,6 @@
     let items = [];
     let explosions = [];
 
-    // ★スマホ用判定と、スマホ専用の速度倍率（PCは1.0、スマホは1.8倍速に）
     let isMobile = false;
     let speedMult = 1.0; 
 
@@ -234,12 +248,17 @@
         }
     }
 
+    function setHitStop(frames) {
+        let actualFrames = isMobile ? frames * 0.4 : frames;
+        hitStopTimer = Math.max(hitStopTimer, actualFrames);
+    }
+
     function useBomb() {
         if (!isPaused && !isDying && playerHp > 1 && bombFlash <= 0 && !isGameOver && !isGameClear && !isChoosingEvolution) {
             if (!isTestMode) playerHp--; 
             bombFlash = 30; 
             playSE('bomb');
-            hitStopTimer = Math.max(hitStopTimer, 20);
+            setHitStop(20);
             
             for(let i=0; i<bossBullets.length; i++) explosions.push({x: bossBullets[i].x, y: bossBullets[i].y, timer: 15});
             bossBullets = [];
@@ -264,7 +283,8 @@
     function selfDestruct() {
         if (!isPaused && !isDying && !isGameOver && !isGameClear && !isChoosingEvolution) {
             playerHp = 0; isDying = true; deathTimer = 90;
-            playSE('explosion'); hitStopTimer = Math.max(hitStopTimer, 20);
+            playSE('explosion'); 
+            setHitStop(20);
         }
     }
 
@@ -348,12 +368,10 @@
 
     let spawnTimerId = setInterval(spawnItem, 800);
 
-    // ★スマホ判定と専用倍率の適用
     if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
         document.getElementById('touchUI').style.display = 'block';
         isMobile = true; 
-        speedMult = 1.8; // スマホの時はすべての速度を1.8倍にする
-        // アイテムの落下間隔も速度に合わせて短くする
+        speedMult = 1.8; 
         clearInterval(spawnTimerId);
         spawnTimerId = setInterval(spawnItem, Math.floor(800 / speedMult));
     }
@@ -475,7 +493,6 @@
           let baseCooldown = 300; 
           if (combo >= 4)  baseCooldown = 250; if (combo >= 6)  baseCooldown = 200; if (combo >= 8)  baseCooldown = 150; 
           if (combo >= 10) baseCooldown = 120; if (combo >= 15) baseCooldown = 90;  if (combo >= 20) baseCooldown = 70;  
-          // ★発射間隔も速度倍率に合わせて短縮
           let cooldown = (isTestMode ? 40 : baseCooldown) / speedMult; 
           
           if (now - lastShotTime > cooldown) {
@@ -539,7 +556,8 @@
         let hm = 10;
         if (isUpdating && player.x + hm < boss.x + boss.width && player.x + player.width - hm > boss.x && player.y + hm < boss.y + boss.height && player.y + player.height - hm > boss.y) {
             if (playerInvincible <= 0 && !isTestMode) {
-                playerHp -= 2; playerInvincible = 50; combo = 0; comboTimer = 0; playSE('damage'); hitStopTimer = Math.max(hitStopTimer, 20); 
+                playerHp -= 2; playerInvincible = 50; combo = 0; comboTimer = 0; playSE('damage'); 
+                setHitStop(20); 
                 if (playerHp <= 0) { playerHp = 0; isDying = true; deathTimer = 90; }
             }
         }
@@ -553,7 +571,8 @@
         let hm = bb.width / 4; 
         if (isUpdating && player.x + hm < bb.x + bb.width && player.x + player.width - hm > bb.x && player.y + hm < bb.y + bb.height && player.y + player.height - hm > bb.y) {
             if (playerInvincible <= 0 && !isTestMode) {
-                playerHp -= 2; playerInvincible = 40; combo = 0; comboTimer = 0; playSE('damage'); hitStopTimer = Math.max(hitStopTimer, 20); 
+                playerHp -= 2; playerInvincible = 40; combo = 0; comboTimer = 0; playSE('damage'); 
+                setHitStop(20); 
                 if (playerHp <= 0) { playerHp = 0; isDying = true; deathTimer = 90; }
             }
             bossBullets.splice(i, 1); continue;
@@ -586,7 +605,7 @@
               let bb = bossBullets[k];
               if (b.x < bb.x + bb.width && b.x + b.width > bb.x && b.y < bb.y + bb.height && b.y + b.height > bb.y) {
                   explosions.push({ x: bb.x, y: bb.y, timer: 15 }); bullets.splice(i, 1); bossBullets.splice(k, 1); hitSomething = true;
-                  hitStopTimer = Math.max(hitStopTimer, 12); playSE('explosion');
+                  setHitStop(12); playSE('explosion');
                   combo++; if (!isBossBattle) score += 5; comboTimer = maxComboTimer; 
                   if (combo % 4 === 0) { playerHp++; if (playerHp > playerMaxHp) playerHp = playerMaxHp; playSE('heal'); }
                   break;
@@ -599,7 +618,7 @@
                 bullets.splice(i, 1); hitSomething = true;
                 if (boss.invincible <= 0) {
                     boss.hp -= 1; bossHitFlash = 5; boss.invincible = 20; 
-                    hitStopTimer = Math.max(hitStopTimer, 12); playSE('hit');
+                    setHitStop(12); playSE('hit');
                     combo++; comboTimer = maxComboTimer; 
                     if (combo % 4 === 0) { playerHp++; if (playerHp > playerMaxHp) playerHp = playerMaxHp; playSE('heal'); }
                     if (boss.hp <= 0) {
@@ -617,10 +636,12 @@
           for(let j = items.length - 1; j >= 0; j--) {
             let item = items[j];
             if (b.x < item.x + item.width && b.x + b.width > item.x && b.y < item.y + item.height && b.y + b.height > item.y) {
-                bullets.splice(i, 1); hitStopTimer = Math.max(hitStopTimer, 12); 
+                bullets.splice(i, 1); 
                 if (item.heal) {
+                    setHitStop(12); 
                     items.splice(j, 1); playerHp += 1; playSE('hit'); if (playerHp > playerMaxHp) playerHp = playerMaxHp;
                 } else if (item.breakable || isTestMode) {
+                    setHitStop(12); 
                     explosions.push({ x: item.x, y: item.y, timer: 15 }); items.splice(j, 1); playSE('explosion');
                     combo++; if (!isBossBattle) score += 5; comboTimer = maxComboTimer; 
                     if (combo % 4 === 0) { playerHp++; if (playerHp > playerMaxHp) playerHp = playerMaxHp; playSE('heal'); }
@@ -661,7 +682,8 @@
               if (item.heal) { items.splice(i, 1); playerHp += 1; playSE('hit'); if (playerHp > playerMaxHp) playerHp = playerMaxHp; continue; } 
               else {
                   if (playerInvincible <= 0 && !isTestMode) {
-                      playerHp -= 1; playerInvincible = 40; combo = 0; comboTimer = 0; playSE('damage'); hitStopTimer = Math.max(hitStopTimer, 20); 
+                      playerHp -= 1; playerInvincible = 40; combo = 0; comboTimer = 0; playSE('damage'); 
+                      setHitStop(20); 
                       if (playerHp <= 0) { playerHp = 0; isDying = true; deathTimer = 90; }
                   }
                   items.splice(i, 1); continue;
