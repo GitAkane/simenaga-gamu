@@ -7,7 +7,7 @@
   <style>
     body { 
       text-align: center; 
-      background-color: #222; 
+      background-color: #000; 
       color: white; 
       font-family: sans-serif; 
       margin: 0;
@@ -25,11 +25,6 @@
     }
     h1 { font-size: 26px; margin: 0 0 5px 0; }
     p { font-size: 15px; line-height: 1.5; margin: 0; }
-
-    @media (max-width: 600px) {
-      h1 { font-size: 18px; }
-      p { font-size: 12px; }
-    }
 
     #gameContainer {
       flex: 1 1 auto;
@@ -58,20 +53,19 @@
       touch-action: none; 
     }
 
-    /* ★ 修正ポイント：操作ボタンをゲーム画面から独立させ、画面全体の最前面に配置 */
     #touchUI {
       position: fixed;
       top: 0;
       left: 0;
       width: 100vw;
       height: 100vh;
-      pointer-events: none; /* ゲーム画面へのタッチをすり抜けさせる */
+      pointer-events: none;
       z-index: 100;
     }
 
     .t-btn {
       position: absolute;
-      pointer-events: auto; /* ボタン部分はタッチを受け付ける */
+      pointer-events: auto;
       background: rgba(255, 255, 255, 0.2);
       border: 2px solid rgba(255, 255, 255, 0.4);
       border-radius: 50%;
@@ -88,6 +82,26 @@
       background: rgba(255, 255, 255, 0.6);
       border-color: #FFD700;
       transform: scale(0.95);
+    }
+
+    /* ★スマホ用のフルスクリーン設定 */
+    @media (max-width: 600px) {
+      #headerArea {
+        display: none; /* スマホではタイトルを隠して画面を広く使う */
+      }
+      #gameContainer {
+        padding: 0;
+      }
+      #gameWrapper {
+        width: 100vw;
+        height: 100vh;
+        max-width: none;
+        max-height: none;
+        aspect-ratio: auto; /* 縦横比を解除して画面いっぱいに伸ばす */
+      }
+      canvas {
+        box-shadow: none;
+      }
     }
   </style>
 </head>
@@ -106,19 +120,16 @@
     </div>
   </div>
   
-  <!-- ★ 修正ポイント：左右の空きスペース（余白）にボタンが配置されるように絶対座標で指定 -->
+  <!-- ★ボタンをゲーム画面の上の押しやすい位置に再配置 -->
   <div id="touchUI" style="display: none;">
-    <!-- 左側の空きスペース（十字キー） -->
-    <div id="btnUp" class="t-btn" style="bottom: 120px; left: 80px; width: 60px; height: 60px; font-size: 24px;">⬆️</div>
-    <div id="btnLeft" class="t-btn" style="bottom: 50px; left: 10px; width: 60px; height: 60px; font-size: 24px;">⬅️</div>
-    <div id="btnRight" class="t-btn" style="bottom: 50px; left: 150px; width: 60px; height: 60px; font-size: 24px;">➡️</div>
-    <div id="btnDown" class="t-btn" style="bottom: 50px; left: 80px; width: 60px; height: 60px; font-size: 24px;">⬇️</div>
+    <div id="btnUp" class="t-btn" style="bottom: 22%; left: 16%; width: 60px; height: 60px; font-size: 24px;">⬆️</div>
+    <div id="btnLeft" class="t-btn" style="bottom: 12%; left: 4%; width: 60px; height: 60px; font-size: 24px;">⬅️</div>
+    <div id="btnRight" class="t-btn" style="bottom: 12%; left: 28%; width: 60px; height: 60px; font-size: 24px;">➡️</div>
+    <div id="btnDown" class="t-btn" style="bottom: 2%; left: 16%; width: 60px; height: 60px; font-size: 24px;">⬇️</div>
 
-    <!-- 右側の空きスペース（アクションキー） -->
-    <div id="btnShoot" class="t-btn" style="bottom: 50px; right: 20px; width: 80px; height: 80px; font-size: 32px;">🎯</div>
-    <div id="btnBomb" class="t-btn" style="bottom: 150px; right: 30px; width: 60px; height: 60px; font-size: 24px;">💣</div>
+    <div id="btnShoot" class="t-btn" style="bottom: 12%; right: 5%; width: 80px; height: 80px; font-size: 32px;">🎯</div>
+    <div id="btnBomb" class="t-btn" style="bottom: 26%; right: 8%; width: 60px; height: 60px; font-size: 24px;">💣</div>
 
-    <!-- 上部の空きスペース（システムキー） -->
     <div id="btnReset" class="t-btn" style="top: 15px; left: 15px; width: 45px; height: 45px; font-size: 18px;" title="セーブ消去">♻️</div>
     <div id="btnPause" class="t-btn" style="top: 15px; right: 15px; width: 45px; height: 45px; font-size: 18px;" title="一時停止">⏸</div>
     <div id="btnSuicide" class="t-btn" style="top: 15px; right: 75px; width: 45px; height: 45px; font-size: 18px;" title="自滅">💀</div>
@@ -248,8 +259,9 @@
         }
     }
 
+    // ★スマホ版のヒットストップをさらに短く（0.2倍）してサクサクに
     function setHitStop(frames) {
-        let actualFrames = isMobile ? frames * 0.4 : frames;
+        let actualFrames = isMobile ? frames * 0.2 : frames;
         hitStopTimer = Math.max(hitStopTimer, actualFrames);
     }
 
@@ -371,7 +383,8 @@
     if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
         document.getElementById('touchUI').style.display = 'block';
         isMobile = true; 
-        speedMult = 1.8; 
+        // ★ スマホの時はさらに速度を上げる (2.2倍速)
+        speedMult = 2.2; 
         clearInterval(spawnTimerId);
         spawnTimerId = setInterval(spawnItem, Math.floor(800 / speedMult));
     }
