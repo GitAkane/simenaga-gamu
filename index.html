@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
+  <!-- スマホでの拡大縮小を禁止して、ゲーム画面を固定する -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>伝説の羽を目指せ！シマエナガシューティング！</title>
   <style>
@@ -26,11 +27,16 @@
     h1 { font-size: 26px; margin: 0 0 5px 0; }
     p { font-size: 15px; line-height: 1.5; margin: 0; }
 
+    @media (max-width: 600px) {
+      h1 { font-size: 18px; }
+      p { font-size: 12px; }
+    }
+
     #gameContainer {
       flex: 1 1 auto;
       display: flex;
       justify-content: center;
-      align-items: center;
+      align-items: center; /* 縦方向の中央に配置 */
       min-height: 0;
       padding: 5px;
     }
@@ -84,23 +90,24 @@
       transform: scale(0.95);
     }
 
-    /* ★スマホ用のフルスクリーン設定 */
+    /* ★スマホ用のフルスクリーン ＋ 上下の余白設定 */
     @media (max-width: 600px) {
       #headerArea {
-        display: none; /* スマホではタイトルを隠して画面を広く使う */
+        display: none; 
       }
       #gameContainer {
         padding: 0;
       }
       #gameWrapper {
-        width: 100vw;
-        height: 100vh;
+        width: 100vw; /* 左右は画面いっぱいに */
+        height: calc(100vh - 80px); /* ★上下に40pxずつ（合計80px）の余白を作る */
         max-width: none;
         max-height: none;
-        aspect-ratio: auto; /* 縦横比を解除して画面いっぱいに伸ばす */
+        aspect-ratio: auto; 
       }
       canvas {
-        box-shadow: none;
+        box-shadow: 0 0 12px rgba(255, 255, 255, 0.3); /* 枠ができたので少し光らせる */
+        border-radius: 12px; /* 画面端から離れたので、角を丸くしてリッチに */
       }
     }
   </style>
@@ -120,7 +127,6 @@
     </div>
   </div>
   
-  <!-- ★ボタンをゲーム画面の上の押しやすい位置に再配置 -->
   <div id="touchUI" style="display: none;">
     <div id="btnUp" class="t-btn" style="bottom: 22%; left: 16%; width: 60px; height: 60px; font-size: 24px;">⬆️</div>
     <div id="btnLeft" class="t-btn" style="bottom: 12%; left: 4%; width: 60px; height: 60px; font-size: 24px;">⬅️</div>
@@ -259,7 +265,6 @@
         }
     }
 
-    // ★スマホ版のヒットストップをさらに短く（0.2倍）してサクサクに
     function setHitStop(frames) {
         let actualFrames = isMobile ? frames * 0.2 : frames;
         hitStopTimer = Math.max(hitStopTimer, actualFrames);
@@ -383,7 +388,6 @@
     if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
         document.getElementById('touchUI').style.display = 'block';
         isMobile = true; 
-        // ★ スマホの時はさらに速度を上げる (2.2倍速)
         speedMult = 2.2; 
         clearInterval(spawnTimerId);
         spawnTimerId = setInterval(spawnItem, Math.floor(800 / speedMult));
